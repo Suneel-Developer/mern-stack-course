@@ -1,0 +1,24 @@
+MANGO DB ALL COMMANDS
+show all databases: show databases
+access any one database: use databaseName
+delete specific database: db.dropDatabase
+create a database: use databaseName
+create a collections: db.createCollection("collection name"),
+insert a objects in collection: db.collectionName.insertOne({name: "suneel", age: 20}),
+insert a different collection: db.collectionName.insertMany([{name: "suneel", age: 20}, {name: "vikram", age: 22}]),
+
+
+
+GET DATA FROM DATABASE
+FIND OPERATION
+get all users: db.collectionname.find()
+get one user using their name: db.collectionName.find({name: "name"})
+
+
+UPDATE A DATA USING UPDATE OPERATION
+
+db.users.updateOne({name: "Vikram"},{$set:{age: 30}})
+
+
+DELETE USER USING DELETE OPERATION
+db.users.deleteOne({name: "Vikram"})
