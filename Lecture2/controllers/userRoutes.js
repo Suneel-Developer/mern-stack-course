@@ -1,4 +1,3 @@
-const { error } = require("console");
 const express = require("express");
 const router = express.Router();
 const fs = require("fs"); // maniplute the data file // fs stands for file system
