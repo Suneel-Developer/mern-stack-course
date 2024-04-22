@@ -23,6 +23,9 @@ const userSchema = new mongoose.Schema({
   gender: {
     type: String,
   },
+  refreshToken: {
+        type: String,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema);

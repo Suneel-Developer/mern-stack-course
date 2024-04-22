@@ -8,26 +8,35 @@ require("./db");
 const User = require("./MODELS/userSchema");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 
 app.use(bodyParser.json());
 app.use(cors());
+app.use(cookieParser());
 
 function autnenticateToken(req, res, next) {
-  const token = req.headers.authorization;
+  const token = req.headers.authorization.split(" ")[1];
+  //   const token = req.headers.authorization;
   const { id } = req.body;
 
-  if (!token) return res.status(401).json({ message: "Auth Error" });
+  //   if (!token) return res.status(401).json({ message: "Auth Error" });
+  if (!token) {
+    const error = new Error("Token Not Found");
+    next(error);
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
     if (id && decoded.id !== id) {
-      return res.status(401).json({ message: "Auth Error" });
+      const error = new Error("Invalid Token");
+      next(error);
     }
     req.id = decoded;
     next();
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Invalid Token" });
+    //     console.log(err);
+    //     res.status(500).json({ message: "Invalid Token" });
+    next(err);
   }
 }
 
@@ -42,7 +51,9 @@ app.post("/register", async (req, res) => {
     const exsitingUser = await User.findOne({ email });
 
     if (exsitingUser) {
-      return res.status(409).json("Email Already exists");
+      //       return res.status(409).json("Email Already exists");
+      const error = new Error("Email Already exists");
+      next(error);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -63,18 +74,21 @@ app.post("/register", async (req, res) => {
       message: "User Registered Successfully!",
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    //     res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // login
-app.post("/login", async (req, res) => {
+app.post("/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const exsitingUser = await User.findOne({ email });
 
     if (!exsitingUser) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      //       return res.status(401).json({ message: "Invalid credentials" });
+      const error = new Error("Invalid credentials");
+      next(error);
     }
     const userPasswordCorrect = await bcrypt.compare(
       password,
@@ -82,16 +96,34 @@ app.post("/login", async (req, res) => {
     );
 
     if (!userPasswordCorrect) {
-      return res.status(401).json({ message: "Invalid Credentials!" });
+      //       return res.status(401).json({ message: "Invalid Credentials!" });
+      const error = new Error("Invalid credentials");
+      next(error);
     }
 
-    const tokens = jwt.sign(
+    const accesstoken = jwt.sign(
       { id: exsitingUser._id },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "1h" }
+      { expiresIn: "1hr" }
     );
 
-    res.status(200).json({ tokens, message: "User logged in Successfully!" });
+    const refreshToken = jwt.sign(
+      { id: exsitingUser._id },
+      process.env.JWT_REFRESH_SECRET_KEY
+    );
+    exsitingUser.refreshToken = refreshToken;
+    await exsitingUser.save();
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      path: "/refresh_token",
+    });
+
+    res.status(200).json({
+      accesstoken,
+      refreshToken,
+      message: "User logged in Successfully!",
+    });
   } catch (err) {
     res.status(500).json({
       message: err.message,
@@ -106,6 +138,50 @@ app.get("/getuserProfile", autnenticateToken, async (req, res) => {
   //     if you hide password
   user.password = undefined;
   res.status(200).json({ user });
+});
+
+app.get("/refresh_token", async (req, res, next) => {
+  const token = req.cookies.refreshToken;
+
+  //   res.send(token)
+  if (!token) { 
+        const error = new Error("Token not Found");
+        next(error);
+  }
+
+  jwt.verify( token, process.env.JWT_REFRESH_SECRET_KEY, async (err, decoded) => {
+      if (err) {
+        const error = new Error("Invalid Token");
+        next(error);
+      }
+
+      const id = decoded.id;
+      const exsitingUser = await User.findById(id);
+      if (!exsitingUser || token !== exsitingUser.refreshToken) {
+        const error = new Error("Invalid Token");
+        next(error);
+      };
+
+      const accesstoken = jwt.sign({ id: exsitingUser._id },process.env.JWT_SECRET_KEY,{ expiresIn: "1hr" });
+  
+      const refreshToken = jwt.sign({ id: exsitingUser._id },process.env.JWT_REFRESH_SECRET_KEY);
+      exsitingUser.refreshToken = refreshToken;
+      await exsitingUser.save();
+      res.cookie("refreshToken", refreshToken, { httpOnly: true, path: "/refresh_token",});
+
+      res.status(200).json({
+        accesstoken,
+        refreshToken,
+        message: "Token Refreshed Successfully!",
+      });
+    }
+  );
+});
+
+// ERROR HANDLING MIDLEARE
+app.use((err, req, res, next) => {
+  console.log("error middleware called: ", err);
+  res.status(500).json({ message: err.message });
 });
 
 app.listen(PORT, () => {
